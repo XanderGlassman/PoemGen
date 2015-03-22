@@ -2,31 +2,96 @@ require "engtagger"
 require "set"
 
 class Poem
-  attr_reader :model_tags, :model_full, :word_bank
-  attr_accessor :text
+  attr_reader :poem, :model_tags, :word_bank, :model_sentence
 
-  #NOTE a tag is a is a reference to a word's part of speech, named in engtagger. 
+  #NOTE a tag is a reference to a word's part of speech, named in engtagger.
+
   def initialize(model_sentence, bank)
     @tagger = EngTagger.new
+    @poem = model_sentence.capitalize
     @model_sentence = model_sentence
     @model_tags = @tagger.get_readable(model_sentence).gsub(/\w*\//, "").downcase
-    @model_full = @tagger.get_readable(model_sentence)
     @word_bank = @tagger.add_tags(bank)
-
   end
 
   def shuffle_word_bank
-    word_bank.split.shuffle.to_set
+    self.word_bank.split.shuffle.to_set
   end
 
-  #OPTMIZE
   def find_word(tag)   
-    @tagger.strip_tags(self.shuffle_word_bank.find{|e|e.match("<#{tag}>")})
+    word = @tagger.strip_tags(self.shuffle_word_bank.find{|e|e.match("<#{tag}>")})
+    raise "#{tag} part of speech not in word bank" if word.nil?
+    word
   end
 
-  def first_gen
-    self.model_tags.split.map{|tag| find_word(tag)}.join(' ').capitalize
+  def generate_poem
+    self.model_tags.split.map{|tag| find_word(tag)}.join(" ").capitalize
   end
+
+  def next_generation(mutation_rate = 100)
+    5.times.map{self.mutate_poem(mutation_rate)}.unshift(self.poem)  
+  end
+
+  def print_generations(gen)
+    gen.each_with_index do |poem, i| 
+      p i == 0 ? "1(parent) #{poem}" : "#{i+1} #{poem}"
+    end 
+  end
+
+  def select_poem(gen)
+    choice = STDIN.gets.chomp.to_i
+    self.allow_exit(choice)
+    if choice < 1 || choice > 6
+      #TODO change to p; doesn't need to break if user messes up input. 
+      # p error message and run again. same for mutation rate
+      raise "must enter the number of the poem you would like to mutate (1 to 5)"    
+    else 
+      @poem = gen[choice-1]
+    end 
+  end
+
+  def mutate_poem(mutation_rate)
+    current_words = self.poem.split
+    self.model_tags.split.map.with_index do |tag, i|
+      if mutation_rate.to_i >= 1 + rand(100) 
+        find_word(tag)
+      else
+        current_words[i]
+      end
+    end.join(" ").capitalize
+  end
+
+  def evolve(mutation_rate)
+    next_gen = next_generation(mutation_rate)
+    self.print_generations(next_gen)
+    select_poem(next_gen)
+  end
+
+  def validate_mutation_rate(provided_rate)
+    self.allow_exit(provided_rate)
+    if provided_rate.to_i.to_s != provided_rate
+      raise "mutation rate must be a number"
+    elsif provided_rate.to_i < 0 || provided_rate.to_i > 100
+      raise "mutation rate must be between 0 and 100"
+    else 
+      provided_rate.to_i
+    end
+  end
+
+  def allow_exit(input)
+    if (input) == "exit"
+      abort("your poem is \"#{poem}\"") 
+    end
+  end
+
+  def run
+    p "please enter the mutation rate (0 to 100)"
+    mutation_rate = self.validate_mutation_rate(STDIN.gets.chomp)
+    p "please choose"
+    self.evolve(mutation_rate)
+    self.run
+  end
+
 end
 
 word_bank = 
@@ -79,6 +144,10 @@ word_bank =
   shifting when his shoulder moved under his thin coat. It was a body
   capable of enormous leverage--a cruel body.
 
+
+
+
+
   Instead of taking the short cut along the Sound we went down the road and
   entered by the big postern. With enchanting murmurs Daisy admired this
   aspect or that of the feudal silhouette against the sky, admired the
@@ -114,7 +183,7 @@ word_bank =
   His bedroom was the simplest room of all--except where the dresser was
   garnished with a toilet set of pure dull gold. Daisy took the brush
   with delight and smoothed her hair, whereupon Gatsby sat down and
-  shaded his eyes and began to laugh. runs loves hates sprints
+  shaded his eyes and began to laugh. 
 
   He took out a pile of shirts and began throwing them, one by one
   before us, shirts of sheer linen and thick silk and fine flannel
@@ -125,9 +194,5 @@ word_bank =
   Indian blue. Suddenly with a strained sound, Daisy bent her head into
   the shirts and began to cry stormily."
 
-# poem = Poem.new('Once he nearly toppled down a flight of stairs.', word_bank)
-# t1 = Time.now
-# p poem.first_gen
-# t2 = Time.now
-
-# p t2 - t1
+poem = Poem.new("Once he toppled down a flight of stairs", word_bank)
+# poem.run
